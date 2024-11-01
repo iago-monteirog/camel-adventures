@@ -16,20 +16,33 @@ public class RotaPedidos {
             @Override
             public void configure() throws Exception {
                 from("file:pedidos?delay=5s&noop=true")
-                        .setProperty("pedidoId", xpath("/pedido/id/text()"))
-                        .setProperty("clientId", xpath("/pedido/pagamento/email-titular/text()"))
-                        .split()
-                        .xpath("/pedido/itens/item")
-                        .log("${id}")
-                        .filter()
-                        .xpath("/item/formato[text()='EBOOK']")
-                        .setProperty("ebookId", xpath("/item/livro/codigo/text()"))
-                        .marshal().xmljson()
-                        .log("${body}")
-                        .setHeader(Exchange.HTTP_METHOD, HttpMethods.GET)
-                        .setHeader(Exchange.HTTP_QUERY,
-                                simple("ebookId=${property.ebookId}&pedidoId=${property.pedidoId}&clienteId=${property.clientId}"))
-                        .to("http4://localhost:8080/webservices/ebook/item");
+                        .routeId("rotaPedidos")
+                        .multicast()
+                        .to("direct:http")
+                        .to("direct:soap");
+
+
+                        from("direct:http")
+                                .routeId("rotaHttp")
+                            .setProperty("pedidoId", xpath("/pedido/id/text()"))
+                            .setProperty("clientId", xpath("/pedido/pagamento/email-titular/text()"))
+                            .split()
+                            .xpath("/pedido/itens/item")
+                            .log("${id}")
+                            .filter()
+                            .xpath("/item/formato[text()='EBOOK']")
+                            .setProperty("ebookId", xpath("/item/livro/codigo/text()"))
+                            .marshal().xmljson()
+                            .log("${body}")
+                            .setHeader(Exchange.HTTP_METHOD, HttpMethods.GET)
+                            .setHeader(Exchange.HTTP_QUERY,
+                                    simple("ebookId=${property.ebookId}&pedidoId=${property.pedidoId}&clienteId=${property.clientId}"))
+                            .to("http4://localhost:8080/webservices/ebook/item");
+
+                        from("direct:soap")
+                                .routeId("rotaSoap")
+                                .setBody(constant("<envolope>teste</envelope>"))
+                        .to("mock:soap");
             }
         });
 
